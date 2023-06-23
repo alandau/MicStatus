@@ -13,6 +13,7 @@ static const IID IID_IAudioEndpointVolumeCallback = { 0x657804fa, 0xd6ad, 0x4496
 
 #define WM_APP_NOTIFYICON WM_APP
 #define WM_APP_MUTE_STATE_CHANGED (WM_APP + 1)
+#define WM_APP_DEVICE_LIST_CHANGED (WM_APP + 2)
 
 typedef struct MicCallback {
     IAudioEndpointVolumeCallback parent; // Must be first
@@ -68,12 +69,103 @@ static IAudioEndpointVolumeCallback* STDMETHODCALLTYPE MicCallbackCreate(HWND hW
     return (IAudioEndpointVolumeCallback*)self;
 }
 
+typedef struct DeviceListCallback {
+    IMMNotificationClient parent; // Must be first
+    LONG refcount;
+    HWND hWnd;
+} DeviceListCallback;
+
+static ULONG STDMETHODCALLTYPE DeviceListCallbackAddRef(IMMNotificationClient* This) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    return InterlockedIncrement(&self->refcount);
+}
+
+static ULONG STDMETHODCALLTYPE DeviceListCallbackRelease(IMMNotificationClient* This) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    LONG count = InterlockedDecrement(&self->refcount);
+    if (count == 0) {
+        HeapFree(GetProcessHeap(), 0, self);
+    }
+    return count;
+}
+
+static HRESULT STDMETHODCALLTYPE DeviceListCallbackQueryInterface(IMMNotificationClient* This, REFIID riid, void** ppvObject) {
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IAudioEndpointVolumeCallback)) {
+        DeviceListCallbackAddRef(This);
+        *ppvObject = This;
+        return NOERROR;
+    }
+    *ppvObject = NULL;
+    return E_NOINTERFACE;
+}
+
+static HRESULT STDMETHODCALLTYPE DeviceListCallbackOnDeviceStateChanged(
+    IMMNotificationClient* This, LPCWSTR pwstrDeviceId, DWORD dwNewState) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    PostMessage(self->hWnd, WM_APP_DEVICE_LIST_CHANGED, 0, 0);
+    return 0;
+}
+
+HRESULT STDMETHODCALLTYPE DeviceListCallbackOnDeviceAdded(IMMNotificationClient* This, LPCWSTR pwstrDeviceId) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    PostMessage(self->hWnd, WM_APP_DEVICE_LIST_CHANGED, 0, 0);
+    return 0;
+}
+
+HRESULT STDMETHODCALLTYPE DeviceListCallbackOnDeviceRemoved(IMMNotificationClient* This, LPCWSTR pwstrDeviceId) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    PostMessage(self->hWnd, WM_APP_DEVICE_LIST_CHANGED, 0, 0);
+    return 0;
+}
+
+HRESULT STDMETHODCALLTYPE DeviceListCallbackOnDefaultDeviceChanged(
+    IMMNotificationClient* This,
+    EDataFlow flow,
+    ERole role,
+    LPCWSTR pwstrDefaultDeviceId) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    PostMessage(self->hWnd, WM_APP_DEVICE_LIST_CHANGED, 0, 0);
+    return 0;
+}
+
+HRESULT STDMETHODCALLTYPE DeviceListCallbackOnPropertyValueChanged(
+    IMMNotificationClient* This,
+    LPCWSTR pwstrDeviceId,
+    const PROPERTYKEY key) {
+    DeviceListCallback* self = (DeviceListCallback*)This;
+    PostMessage(self->hWnd, WM_APP_DEVICE_LIST_CHANGED, 0, 0);
+    return 0;
+}
+
+static IMMNotificationClientVtbl DeviceListCallbackVtbl = {
+    DeviceListCallbackQueryInterface,
+    DeviceListCallbackAddRef,
+    DeviceListCallbackRelease,
+    DeviceListCallbackOnDeviceStateChanged,
+    DeviceListCallbackOnDeviceAdded,
+    DeviceListCallbackOnDeviceRemoved,
+    DeviceListCallbackOnDefaultDeviceChanged,
+    DeviceListCallbackOnPropertyValueChanged,
+};
+
+static IMMNotificationClient* STDMETHODCALLTYPE DeviceListCallbackCreate(HWND hWnd) {
+    DeviceListCallback* self = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MicCallback));
+    if (self == NULL) {
+        return NULL;
+    }
+    self->parent.lpVtbl = &DeviceListCallbackVtbl;
+    self->refcount = 1;
+    self->hWnd = hWnd;
+    return (IMMNotificationClient*)self;
+}
+
 static struct G {
     HICON hActiveIcon, hMutedIcon;
     IMMDeviceEnumerator* pEnumerator;
     IMMDevice* pDevice;
     IAudioEndpointVolume* pVolume;
     IAudioEndpointVolumeCallback* pMutedCallback;
+    IMMNotificationClient* pDeviceListCallback;
 } G;
 
 static BOOL InitGlobals(HWND hWnd) {
@@ -91,6 +183,8 @@ static BOOL InitGlobals(HWND hWnd) {
         return FALSE;
     }
     G.pMutedCallback = MicCallbackCreate(hWnd);
+    G.pDeviceListCallback = DeviceListCallbackCreate(hWnd);
+    G.pEnumerator->lpVtbl->RegisterEndpointNotificationCallback(G.pEnumerator, G.pDeviceListCallback);
 
     return TRUE;
 }
@@ -244,6 +338,17 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
     case WM_APP_MUTE_STATE_CHANGED: {
         BOOL active = !wParam;
         CreateOrSetTrayIcon(hWnd, active, FALSE);
+        SetLedState(active);
+        return 0;
+    }
+    case WM_APP_DEVICE_LIST_CHANGED: {
+        if (!InitMuteListener()) {
+            return 0;
+        }
+        BOOL active = IsMicActive();
+        if (!CreateOrSetTrayIcon(hWnd, active, FALSE)) {
+            return 0;
+        }
         SetLedState(active);
         return 0;
     }
