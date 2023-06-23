@@ -270,12 +270,17 @@ static void SetLedState(BOOL active) {
     if (led == !!active) {
         return;
     }
-    // Press scroll lock, with shift to avoid triggering hotkey
-    INPUT inputs[4];
-    FillInputStruct(&inputs[0], VK_SHIFT, TRUE);
-    FillInputStruct(&inputs[1], VK_SCROLL, TRUE);
-    FillInputStruct(&inputs[2], VK_SCROLL, FALSE);
-    FillInputStruct(&inputs[3], VK_SHIFT, FALSE);
+    // Press scroll lock, with shift to avoid triggering hotkey.
+    // If SetLedState is called due to a press on scroll lock, the key might still be down,
+    // so we need to release it (inputs[0], inputs[1]) before pressing it again for the
+    // press to take effect.
+    INPUT inputs[6];
+    FillInputStruct(&inputs[0], VK_SCROLL, FALSE);
+    FillInputStruct(&inputs[1], VK_SHIFT, FALSE);
+    FillInputStruct(&inputs[2], VK_SHIFT, TRUE);
+    FillInputStruct(&inputs[3], VK_SCROLL, TRUE);
+    FillInputStruct(&inputs[4], VK_SCROLL, FALSE);
+    FillInputStruct(&inputs[5], VK_SHIFT, FALSE);
     SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
 }
 
@@ -294,19 +299,8 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
         SetLedState(active);
         return 0;
     case WM_HOTKEY:
-    {
-        
-        BYTE statebuf[256];
-        if (!GetKeyboardState(statebuf)) {
-            return 0;
-        }
-        // A scroll lock hotkey inhibits notmal processing, do it manually
-        statebuf[VK_SCROLL] ^= 1;
-        SetKeyboardState(statebuf);
-        
         ToggleMicMute();
         return 0;
-    }
     case WM_DESTROY:
         DestroyTrayIcon(hWnd);
         PostQuitMessage(0);
