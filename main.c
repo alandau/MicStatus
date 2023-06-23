@@ -161,6 +161,7 @@ static IMMNotificationClient* STDMETHODCALLTYPE DeviceListCallbackCreate(HWND hW
 
 static struct G {
     HICON hActiveIcon, hMutedIcon;
+    UINT uTaskbarRestartMessage;
     IMMDeviceEnumerator* pEnumerator;
     IMMDevice* pDevice;
     IAudioEndpointVolume* pVolume;
@@ -168,7 +169,15 @@ static struct G {
     IMMNotificationClient* pDeviceListCallback;
 } G;
 
-static BOOL InitGlobals(HWND hWnd) {
+static BOOL LoadIcons(void) {
+    if (G.hActiveIcon) {
+        DestroyIcon(G.hActiveIcon);
+        G.hActiveIcon = NULL;
+    }
+    if (G.hMutedIcon) {
+        DestroyIcon(G.hMutedIcon);
+        G.hMutedIcon = NULL;
+    }
     static const wchar_t icon_dll[] = L"%SystemRoot%\\System32\\SndVolSSO.dll";
     G.hActiveIcon = ExtractIcon(NULL, icon_dll, -141);
     if (G.hActiveIcon == NULL || G.hActiveIcon == (HICON)1) {
@@ -178,8 +187,16 @@ static BOOL InitGlobals(HWND hWnd) {
     if (G.hMutedIcon == NULL || G.hMutedIcon == (HICON)1) {
         return FALSE;
     }
+    return TRUE;
+}
 
+static BOOL InitGlobals(HWND hWnd) {
+    if (!LoadIcons()) {
+        MessageBox(hWnd, L"Can't load icons.", L"Error", MB_ICONERROR);
+        return FALSE;
+    }
     if (FAILED(CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, &G.pEnumerator))) {
+        MessageBox(hWnd, L"Can't enumerate sound devices.", L"Error", MB_ICONERROR);
         return FALSE;
     }
     G.pMutedCallback = MicCallbackCreate(hWnd);
@@ -288,7 +305,7 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
     switch (message) {
     case WM_CREATE:
         RegisterHotKey(hWnd, 1, 0, VK_SCROLL);
-        //s_uTaskbarRestart = RegisterWindowMessage(TEXT("TaskbarCreated"));
+        G.uTaskbarRestartMessage = RegisterWindowMessage(L"TaskbarCreated");
         if (!InitGlobals(hWnd) || !InitMuteListener()) {
             return -1;
         }
@@ -304,6 +321,10 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
     case WM_DESTROY:
         DestroyTrayIcon(hWnd);
         PostQuitMessage(0);
+        return 0;
+    case WM_DPICHANGED:
+        LoadIcons();
+        CreateOrSetTrayIcon(hWnd, IsMicActive(), FALSE);
         return 0;
     case WM_APP_NOTIFYICON:
         switch (LOWORD(lParam)) {
@@ -346,6 +367,17 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
         SetLedState(active);
         return 0;
     }
+    default:
+        if (message == G.uTaskbarRestartMessage) {
+            // We get this message when the explorer.exe restarted (and we need to create the icon)
+            // or when the taskbar was restarted due to a DPI change (and we need to update the icon),
+            // so try adding, and if it failed, update.
+            BOOL active = IsMicActive();
+            if (!CreateOrSetTrayIcon(hWnd, active, TRUE)) {
+                CreateOrSetTrayIcon(hWnd, active, FALSE);
+            }
+            return 0;
+        }
     }
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
