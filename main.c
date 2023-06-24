@@ -1,5 +1,7 @@
 #define LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0601
+#include "resource.h"
+#include "settings.h"
 #include <SDKDDKVer.h>
 #include <Windows.h>
 #include <windowsx.h>
@@ -162,6 +164,7 @@ static IMMNotificationClient* STDMETHODCALLTYPE DeviceListCallbackCreate(HWND hW
 static struct G {
     HICON hActiveIcon, hMutedIcon;
     UINT uTaskbarRestartMessage;
+    Settings settings;
     IMMDeviceEnumerator* pEnumerator;
     IMMDevice* pDevice;
     IAudioEndpointVolume* pVolume;
@@ -283,28 +286,46 @@ static void FillInputStruct(INPUT* input, WORD vk, BOOL press) {
     }
 }
 static void SetLedState(BOOL active) {
+    if (!G.settings.bShowLed) {
+        return;
+    }
+    if (G.settings.bInvertLed) {
+        active = !active;
+    }
     BOOL led = !!(GetKeyState(VK_SCROLL) & 1);
     if (led == !!active) {
         return;
     }
-    // Press scroll lock, with shift to avoid triggering hotkey.
-    // If SetLedState is called due to a press on scroll lock, the key might still be down,
-    // so we need to release it (inputs[0], inputs[1]) before pressing it again for the
-    // press to take effect.
-    INPUT inputs[6];
-    FillInputStruct(&inputs[0], VK_SCROLL, FALSE);
-    FillInputStruct(&inputs[1], VK_SHIFT, FALSE);
-    FillInputStruct(&inputs[2], VK_SHIFT, TRUE);
-    FillInputStruct(&inputs[3], VK_SCROLL, TRUE);
-    FillInputStruct(&inputs[4], VK_SCROLL, FALSE);
-    FillInputStruct(&inputs[5], VK_SHIFT, FALSE);
-    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+    if (G.settings.uHotkey == VK_SCROLL && G.settings.uModifiers == 0) {
+        // Press scroll lock, with shift to avoid triggering hotkey.
+        // If SetLedState is called due to a press on scroll lock, the key might still be down,
+        // so we need to release it (inputs[0], inputs[1]) before pressing it again for the
+        // press to take effect.
+        INPUT inputs[6];
+        FillInputStruct(&inputs[0], VK_SCROLL, FALSE);
+        FillInputStruct(&inputs[1], VK_SHIFT, FALSE);
+        FillInputStruct(&inputs[2], VK_SHIFT, TRUE);
+        FillInputStruct(&inputs[3], VK_SCROLL, TRUE);
+        FillInputStruct(&inputs[4], VK_SCROLL, FALSE);
+        FillInputStruct(&inputs[5], VK_SHIFT, FALSE);
+        SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+    } else {
+        INPUT inputs[4];
+        FillInputStruct(&inputs[0], VK_SCROLL, FALSE);
+        FillInputStruct(&inputs[1], VK_SHIFT, FALSE);
+        FillInputStruct(&inputs[2], VK_SCROLL, TRUE);
+        FillInputStruct(&inputs[3], VK_SCROLL, FALSE);
+        SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+    }
 }
 
 static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
-        RegisterHotKey(hWnd, 1, 0, VK_SCROLL);
+        LoadSettings(&G.settings);
+        if (G.settings.uHotkey != 0) {
+            RegisterHotKey(hWnd, 1, G.settings.uModifiers, G.settings.uHotkey);
+        }
         G.uTaskbarRestartMessage = RegisterWindowMessage(L"TaskbarCreated");
         if (!InitGlobals(hWnd) || !InitMuteListener()) {
             return -1;
@@ -335,13 +356,22 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
             // Set our window as foreground so the menu disappears when focus is lost
             SetForegroundWindow(hWnd);
             HMENU hMenu = CreatePopupMenu();
-            InsertMenu(hMenu, -1, MF_BYPOSITION, 1, L"E&xit");
+            InsertMenu(hMenu, -1, MF_BYPOSITION, 1, L"&Settings...");
+            InsertMenu(hMenu, -1, MF_BYPOSITION, 2, L"E&xit");
             int id = TrackPopupMenu(hMenu, TPM_RIGHTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam), 0, hWnd, NULL);
             switch (id) {
             case 0:
                 // Showing the menu failed
                 break;
             case 1:
+                UnregisterHotKey(hWnd, 1);
+                DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SETTINGS), NULL, SettingsDlgProc, (LPARAM)&G.settings);
+                if (G.settings.uHotkey != 0) {
+                    RegisterHotKey(hWnd, 1, G.settings.uModifiers, G.settings.uHotkey);
+                }
+                SetLedState(IsMicActive());
+                break;
+            case 2:
                 DestroyWindow(hWnd);
                 break;
             }
