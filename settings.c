@@ -35,6 +35,16 @@ static BOOL GetAppVersion(wchar_t* buf, DWORD len) {
 }
 
 static void SaveSettings(const Settings* settings) {
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"SOFTWARE\\alandau.github.io\\MicStatus", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) != 0) {
+        return;
+    }
+    DWORD val;
+    val = settings->bShowLed; RegSetValueEx(hKey, L"ShowLed", 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+    val = settings->bInvertLed; RegSetValueEx(hKey, L"InvertLed", 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+    val = settings->uHotkey; RegSetValueEx(hKey, L"Hotkey", 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+    val = settings->uModifiers; RegSetValueEx(hKey, L"HotkeyModifiers", 0, REG_DWORD, (BYTE*)&val, sizeof(val));
+    RegCloseKey(hKey);
 }
 
 static BYTE ConvertModifiersWmHotkeyToControl(UINT mods) {
@@ -105,4 +115,15 @@ void LoadSettings(Settings* settings) {
     settings->bInvertLed = FALSE;
     settings->uHotkey = VK_SCROLL;
     settings->uModifiers = 0;
+
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"SOFTWARE\\alandau.github.io\\MicStatus", 0, NULL, 0, KEY_READ, NULL, &hKey, NULL) != 0) {
+        return;
+    }
+    DWORD val, len;
+    len = sizeof(val); if (RegQueryValueEx(hKey, L"ShowLed", NULL, NULL, (BYTE*)&val, &len) == 0 && len == sizeof(val)) settings->bShowLed = !!val;
+    len = sizeof(val); if (RegQueryValueEx(hKey, L"InvertLed", NULL, NULL, (BYTE*)&val, &len) == 0 && len == sizeof(val)) settings->bInvertLed = !!val;
+    len = sizeof(val); if (RegQueryValueEx(hKey, L"Hotkey", NULL, NULL, (BYTE*)&val, &len) == 0 && len == sizeof(val)) settings->uHotkey = val;
+    len = sizeof(val); if (RegQueryValueEx(hKey, L"HotkeyModifiers", NULL, NULL, (BYTE*)&val, &len) == 0 && len == sizeof(val)) settings->uModifiers = val;
+    RegCloseKey(hKey);
 }
