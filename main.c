@@ -2,6 +2,7 @@
 #define _WIN32_WINNT 0x0601
 #include "resource.h"
 #include "settings.h"
+#include "dialog.h"
 #include <SDKDDKVer.h>
 #include <Windows.h>
 #include <windowsx.h>
@@ -365,7 +366,7 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
                 break;
             case 1:
                 UnregisterHotKey(hWnd, 1);
-                DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SETTINGS), NULL, SettingsDlgProc, (LPARAM)&G.settings);
+                DialogBoxParamWithDefaultFont(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SETTINGS), NULL, SettingsDlgProc, (LPARAM)&G.settings);
                 if (G.settings.uHotkey != 0) {
                     RegisterHotKey(hWnd, 1, G.settings.uModifiers, G.settings.uHotkey);
                 }

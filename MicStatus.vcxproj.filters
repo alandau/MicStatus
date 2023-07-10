@@ -21,6 +21,9 @@
     <ClCompile Include="settings.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="dialog.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="MicStatus.manifest" />
@@ -30,6 +33,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="settings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

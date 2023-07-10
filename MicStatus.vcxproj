@@ -147,6 +147,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="dialog.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="settings.c" />
   </ItemGroup>
@@ -154,6 +155,7 @@
     <Manifest Include="MicStatus.manifest" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="dialog.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="settings.h" />
   </ItemGroup>
