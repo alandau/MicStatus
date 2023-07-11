@@ -77,8 +77,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM 
             SetWindowText(hDlg, caption);
         }
         CheckDlgButton(hDlg, IDC_LED_CHECK, settings->bShowLed ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_LED_INVERT_CHECK, settings->bInvertLed ? BST_CHECKED : BST_UNCHECKED);
-        EnableWindow(GetDlgItem(hDlg, IDC_LED_INVERT_CHECK), settings->bShowLed);
+        CheckDlgButton(hDlg, IDC_LED_ON_WHEN_ACTIVE_RADIO, !settings->bInvertLed ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_LED_ON_WHEN_MUTED_RADIO, settings->bInvertLed ? BST_CHECKED : BST_UNCHECKED);
+        EnableWindow(GetDlgItem(hDlg, IDC_LED_ON_WHEN_ACTIVE_RADIO), settings->bShowLed);
+        EnableWindow(GetDlgItem(hDlg, IDC_LED_ON_WHEN_MUTED_RADIO), settings->bShowLed);
         SendMessage(GetDlgItem(hDlg, IDC_HOTKEY), HKM_SETHOTKEY,
             MAKEWORD(settings->uHotkey, ConvertModifiersWmHotkeyToControl(settings->uModifiers)), 0);
         return TRUE;
@@ -88,7 +90,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM 
         case IDOK: {
             Settings* settings = (Settings*)GetWindowLongPtr(hDlg, DWLP_USER);
             settings->bShowLed = IsDlgButtonChecked(hDlg, IDC_LED_CHECK);
-            settings->bInvertLed = IsDlgButtonChecked(hDlg, IDC_LED_INVERT_CHECK);
+            settings->bInvertLed = IsDlgButtonChecked(hDlg, IDC_LED_ON_WHEN_MUTED_RADIO);
             LRESULT hk = SendMessage(GetDlgItem(hDlg, IDC_HOTKEY), HKM_GETHOTKEY, 0, 0);
             settings->uHotkey = LOBYTE(LOWORD(hk));
             settings->uModifiers = ConvertModifiersControlToWmHotkey(HIBYTE(LOWORD(hk)));
@@ -101,7 +103,8 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM 
             return TRUE;
         case IDC_LED_CHECK:
             if (HIWORD(wParam) == BN_CLICKED) {
-                EnableWindow(GetDlgItem(hDlg, IDC_LED_INVERT_CHECK), IsDlgButtonChecked(hDlg, IDC_LED_CHECK));
+                EnableWindow(GetDlgItem(hDlg, IDC_LED_ON_WHEN_ACTIVE_RADIO), IsDlgButtonChecked(hDlg, IDC_LED_CHECK));
+                EnableWindow(GetDlgItem(hDlg, IDC_LED_ON_WHEN_MUTED_RADIO), IsDlgButtonChecked(hDlg, IDC_LED_CHECK));
                 return TRUE;
             }
             break;
