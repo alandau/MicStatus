@@ -172,6 +172,9 @@ static struct G {
     IAudioEndpointVolume* pVolume;
     IAudioEndpointVolumeCallback* pMutedCallback;
     IMMNotificationClient* pDeviceListCallback;
+
+    IMMDevice* pSoundDevice;
+    IAudioEndpointVolume* pSoundVolume;
 } G;
 
 static BOOL LoadIcons(void) {
@@ -212,6 +215,14 @@ static BOOL InitGlobals(HWND hWnd) {
 }
 
 static BOOL InitMuteListener(void) {
+    if (G.pSoundVolume) {
+        G.pSoundVolume->lpVtbl->Release(G.pSoundVolume);
+        G.pSoundVolume = NULL;
+    }
+    if (G.pSoundDevice) {
+        G.pSoundDevice->lpVtbl->Release(G.pSoundDevice);
+        G.pSoundDevice = NULL;
+    }
     if (G.pVolume) {
         if (G.pMutedCallback) {
             G.pVolume->lpVtbl->UnregisterControlChangeNotify(G.pVolume, G.pMutedCallback);
@@ -232,6 +243,12 @@ static BOOL InitMuteListener(void) {
     if (FAILED(G.pVolume->lpVtbl->RegisterControlChangeNotify(G.pVolume, G.pMutedCallback))) {
         return FALSE;
     }
+    if (FAILED(G.pEnumerator->lpVtbl->GetDefaultAudioEndpoint(G.pEnumerator, eRender, eCommunications, &G.pSoundDevice))) {
+        return FALSE;
+    }
+    if (FAILED(G.pSoundDevice->lpVtbl->Activate(G.pSoundDevice, &IID_IAudioEndpointVolume, CLSCTX_ALL, NULL, &G.pSoundVolume))) {
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -250,6 +267,24 @@ static void ToggleMicMute(void) {
             return;
         }
         G.pVolume->lpVtbl->SetMute(G.pVolume, !muted, NULL);
+    }
+}
+
+static void UnmuteSounds(void) {
+    if (G.pSoundVolume) {
+        G.pSoundVolume->lpVtbl->SetMute(G.pSoundVolume, FALSE, NULL);
+        if (G.settings.bUnmuteChangeVolume) {
+            G.pSoundVolume->lpVtbl->SetMasterVolumeLevelScalar(G.pSoundVolume, G.settings.uUnmuteVolume / 100.0f, NULL);
+        }
+    }
+}
+
+static void MuteSounds(void) {
+    if (G.pSoundVolume) {
+        if (G.settings.bMuteChangeVolume) {
+            G.pSoundVolume->lpVtbl->SetMasterVolumeLevelScalar(G.pSoundVolume, G.settings.uMuteVolume / 100.0f, NULL);
+        }
+        G.pSoundVolume->lpVtbl->SetMute(G.pSoundVolume, TRUE, NULL);
     }
 }
 
@@ -287,6 +322,7 @@ static void FillInputStruct(INPUT* input, WORD vk, BOOL press) {
         input->ki.dwFlags = KEYEVENTF_KEYUP;
     }
 }
+
 static void SetLedState(BOOL active) {
     if (!G.settings.bShowLed) {
         return;
@@ -321,13 +357,29 @@ static void SetLedState(BOOL active) {
     }
 }
 
+void UnregisterHotkeys(HWND hWnd) {
+    UnregisterHotKey(hWnd, 1);
+    UnregisterHotKey(hWnd, 2);
+    UnregisterHotKey(hWnd, 3);
+}
+
+void RegisterHotkeys(HWND hWnd, const Settings* settings) {
+    if (settings->uHotkey != 0) {
+        RegisterHotKey(hWnd, 1, settings->uModifiers & 0x7fffffff, settings->uHotkey);
+    }
+    if (settings->uUnmuteHotkey != 0) {
+        RegisterHotKey(hWnd, 2, settings->uUnmuteModifiers & 0x7fffffff, settings->uUnmuteHotkey);
+    }
+    if (settings->uMuteHotkey != 0) {
+        RegisterHotKey(hWnd, 3, settings->uMuteModifiers & 0x7fffffff, settings->uMuteHotkey);
+    }
+}
+
 static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE:
         LoadSettings(&G.settings);
-        if (G.settings.uHotkey != 0) {
-            RegisterHotKey(hWnd, 1, G.settings.uModifiers & 0x7fffffff, G.settings.uHotkey);
-        }
+        RegisterHotkeys(hWnd, &G.settings);
         G.uTaskbarRestartMessage = RegisterWindowMessage(L"TaskbarCreated");
         if (!InitGlobals(hWnd) || !InitMuteListener()) {
             return -1;
@@ -339,7 +391,11 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
         SetLedState(active);
         return 0;
     case WM_HOTKEY:
-        ToggleMicMute();
+        switch (wParam) {
+        case 1: ToggleMicMute(); break;
+        case 2: UnmuteSounds(); break;
+        case 3: MuteSounds(); break;
+        }
         return 0;
     case WM_DESTROY:
         DestroyTrayIcon(hWnd);
@@ -366,11 +422,9 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
                 // Showing the menu failed
                 break;
             case 1:
-                UnregisterHotKey(hWnd, 1);
+                UnregisterHotkeys(hWnd);
                 DialogBoxParamWithDefaultFont(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SETTINGS), NULL, SettingsDlgProc, (LPARAM)&G.settings);
-                if (G.settings.uHotkey != 0) {
-                    RegisterHotKey(hWnd, 1, G.settings.uModifiers & 0x7fffffff, G.settings.uHotkey);
-                }
+                RegisterHotkeys(hWnd, &G.settings);
                 SetLedState(IsMicActive());
                 break;
             case 2:

@@ -181,7 +181,7 @@ void LoadSettings(Settings* settings) {
     settings->uHotkey = VK_SCROLL;
     settings->uModifiers = 0;
 
-    settings->uUnmuteHotkey = VK_RIGHT;
+    settings->uUnmuteHotkey = VK_UP;
     settings->uUnmuteModifiers = MOD_ALT | MOD_CONTROL | MOD_SHIFT | 0x80000000;
     settings->bUnmuteChangeVolume = TRUE;
     settings->uUnmuteVolume = 60;
