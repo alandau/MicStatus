@@ -326,7 +326,7 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
     case WM_CREATE:
         LoadSettings(&G.settings);
         if (G.settings.uHotkey != 0) {
-            RegisterHotKey(hWnd, 1, G.settings.uModifiers, G.settings.uHotkey);
+            RegisterHotKey(hWnd, 1, G.settings.uModifiers & 0x7fffffff, G.settings.uHotkey);
         }
         G.uTaskbarRestartMessage = RegisterWindowMessage(L"TaskbarCreated");
         if (!InitGlobals(hWnd) || !InitMuteListener()) {
@@ -358,7 +358,7 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
             // Set our window as foreground so the menu disappears when focus is lost
             SetForegroundWindow(hWnd);
             HMENU hMenu = CreatePopupMenu();
-            InsertMenu(hMenu, -1, MF_BYPOSITION, 1, L"&Settings...");
+            InsertMenu(hMenu, -1, MF_BYPOSITION, 1, L"&Settings");
             InsertMenu(hMenu, -1, MF_BYPOSITION, 2, L"E&xit");
             int id = TrackPopupMenu(hMenu, TPM_RIGHTALIGN | TPM_RETURNCMD | TPM_NONOTIFY, GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam), 0, hWnd, NULL);
             switch (id) {
@@ -369,7 +369,7 @@ static LRESULT CALLBACK MicWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
                 UnregisterHotKey(hWnd, 1);
                 DialogBoxParamWithDefaultFont(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SETTINGS), NULL, SettingsDlgProc, (LPARAM)&G.settings);
                 if (G.settings.uHotkey != 0) {
-                    RegisterHotKey(hWnd, 1, G.settings.uModifiers, G.settings.uHotkey);
+                    RegisterHotKey(hWnd, 1, G.settings.uModifiers & 0x7fffffff, G.settings.uHotkey);
                 }
                 SetLedState(IsMicActive());
                 break;
