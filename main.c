@@ -6,6 +6,7 @@
 #include <SDKDDKVer.h>
 #include <Windows.h>
 #include <windowsx.h>
+#include <CommCtrl.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 
@@ -421,6 +422,7 @@ int WINAPI wWinMain(
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    InitCommonControls();
     if (FAILED(CoInitialize(NULL))) {
         return 1;
     }
